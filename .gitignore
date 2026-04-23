@@ -1,0 +1,45 @@
+plan.md
+.claude/
+.plan
+CLAUDE.md
+
+# secrets — never commit these
+.env
+credentials.json
+token.json
+sa-key.json
+
+# python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# fixtures contain real email data — keep out of git
+tests/fixtures/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDEs
+.idea/
+.vscode/
+
+.agents/
+.agent/
+docs/
+.plans/
+
+gmail_body.json
+body.json
+commands.md
