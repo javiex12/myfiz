@@ -60,8 +60,8 @@ uv sync
 ### 2. Create GCP project
 
 ```bash
-gcloud projects create finbot-prod --name="Finbot"
-gcloud config set project finbot-prod
+gcloud projects create <your-gcp-project> --name="Finbot"
+gcloud config set project <your-gcp-project>
 ```
 
 Enable the required APIs:
@@ -97,9 +97,9 @@ python -c "import secrets; print(secrets.token_hex(32))"
 2. Create three tabs with these **exact** names: `expenses`, `processed_emails`, `errors`
 3. Add headers to each tab — **Row 1, exact lowercase, no spaces**:
 
-**expenses** (columns A–H):
+**expenses** (columns A–G):
 ```
-timestamp | concepto | monto | moneda | modalidad | fuente | message_id | raw_excerpt
+timestamp | concepto | monto | moneda | modalidad | fuente | message_id
 ```
 
 **processed_emails** (columns A–B):
@@ -112,6 +112,12 @@ message_id | processed_at
 timestamp | type | detail | raw
 ```
 
+**config** (columns A–B):
+```
+key | value
+```
+The `config` sheet is created automatically on first run. It stores `last_history_id` to track Gmail history continuity across webhooks.
+
 4. Copy the Sheet ID from the URL: `https://docs.google.com/spreadsheets/d/<SHEET_ID>/edit`
 
 ### 5. Create Service Account for Sheets
@@ -119,13 +125,13 @@ timestamp | type | detail | raw
 ```bash
 gcloud iam service-accounts create finbot-sa \
   --display-name="Finbot Sheets SA" \
-  --project=finbot-prod
+  --project=<your-gcp-project>
 
 gcloud iam service-accounts keys create sa-key.json \
-  --iam-account=finbot-sa@finbot-prod.iam.gserviceaccount.com
+  --iam-account=finbot-sa@<your-gcp-project>.iam.gserviceaccount.com
 ```
 
-Share your Google Sheet with `finbot-sa@finbot-prod.iam.gserviceaccount.com` as **Editor**.
+Share your Google Sheet with `finbot-sa@<your-gcp-project>.iam.gserviceaccount.com` as **Editor**.
 
 ### 6. Generate Gmail OAuth token
 
@@ -143,13 +149,13 @@ A browser window opens — log in with the Gmail account that receives BCP email
 ### 7. Create Pub/Sub topic
 
 ```bash
-gcloud pubsub topics create gmail-notifications --project=finbot-prod
+gcloud pubsub topics create gmail-notifications --project=<your-gcp-project>
 
 # Grant Gmail permission to publish to this topic (required for Gmail Watch)
 gcloud pubsub topics add-iam-policy-binding gmail-notifications \
   --member="serviceAccount:gmail-api-push@system.gserviceaccount.com" \
   --role="roles/pubsub.publisher" \
-  --project=finbot-prod
+  --project=<your-gcp-project>
 ```
 
 ### 8. Upload secrets to Secret Manager
@@ -158,21 +164,21 @@ gcloud pubsub topics add-iam-policy-binding gmail-notifications \
 
 ```bash
 # Telegram
-gcloud secrets create TELEGRAM_BOT_TOKEN --data-file=- --project=finbot-prod <<< "<your-bot-token>"
-gcloud secrets create TELEGRAM_WEBHOOK_SECRET --data-file=- --project=finbot-prod <<< "<your-webhook-secret>"
-gcloud secrets create TELEGRAM_ALLOWED_CHAT_IDS --data-file=- --project=finbot-prod <<< "[<your-chat-id>]"
+gcloud secrets create TELEGRAM_BOT_TOKEN --data-file=- --project=<your-gcp-project> <<< "<your-bot-token>"
+gcloud secrets create TELEGRAM_WEBHOOK_SECRET --data-file=- --project=<your-gcp-project> <<< "<your-webhook-secret>"
+gcloud secrets create TELEGRAM_ALLOWED_CHAT_IDS --data-file=- --project=<your-gcp-project> <<< "[<your-chat-id>]"
 
 # Google
-gcloud secrets create GOOGLE_SERVICE_ACCOUNT_JSON --data-file=sa-key.json --project=finbot-prod
-gcloud secrets create GMAIL_OAUTH_CREDENTIALS --data-file=token.json --project=finbot-prod
-gcloud secrets create GMAIL_USER_EMAIL --data-file=- --project=finbot-prod <<< "<your-gmail>"
-gcloud secrets create SHEET_ID --data-file=- --project=finbot-prod <<< "<your-sheet-id>"
+gcloud secrets create GOOGLE_SERVICE_ACCOUNT_JSON --data-file=sa-key.json --project=<your-gcp-project>
+gcloud secrets create GMAIL_OAUTH_CREDENTIALS --data-file=token.json --project=<your-gcp-project>
+gcloud secrets create GMAIL_USER_EMAIL --data-file=- --project=<your-gcp-project> <<< "<your-gmail>"
+gcloud secrets create SHEET_ID --data-file=- --project=<your-gcp-project> <<< "<your-sheet-id>"
 
 # Pub/Sub
-gcloud secrets create PUBSUB_TOPIC --data-file=- --project=finbot-prod <<< "gmail-notifications"
+gcloud secrets create PUBSUB_TOPIC --data-file=- --project=<your-gcp-project> <<< "gmail-notifications"
 
 # Placeholder — will update after first deploy
-gcloud secrets create CLOUD_RUN_URL --data-file=- --project=finbot-prod <<< "https://placeholder.run.app"
+gcloud secrets create CLOUD_RUN_URL --data-file=- --project=<your-gcp-project> <<< "https://placeholder.run.app"
 ```
 
 Delete local credentials after uploading:
@@ -182,13 +188,13 @@ rm sa-key.json token.json credentials.json
 
 Grant Cloud Run access to read secrets and build from source:
 ```bash
-PROJECT_NUMBER=$(gcloud projects describe finbot-prod --format="value(projectNumber)")
+PROJECT_NUMBER=$(gcloud projects describe <your-gcp-project> --format="value(projectNumber)")
 
-gcloud projects add-iam-policy-binding finbot-prod \
+gcloud projects add-iam-policy-binding <your-gcp-project> \
   --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
   --role="roles/secretmanager.secretAccessor"
 
-gcloud projects add-iam-policy-binding finbot-prod \
+gcloud projects add-iam-policy-binding <your-gcp-project> \
   --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
   --role="roles/cloudbuild.builds.builder"
 ```
@@ -200,7 +206,7 @@ gcloud run deploy finbot \
   --source . \
   --region=us-central1 \
   --allow-unauthenticated \
-  --project=finbot-prod \
+  --project=<your-gcp-project> \
   --set-secrets="TELEGRAM_BOT_TOKEN=TELEGRAM_BOT_TOKEN:latest,TELEGRAM_ALLOWED_CHAT_IDS=TELEGRAM_ALLOWED_CHAT_IDS:latest,TELEGRAM_WEBHOOK_SECRET=TELEGRAM_WEBHOOK_SECRET:latest,GOOGLE_SERVICE_ACCOUNT_JSON=GOOGLE_SERVICE_ACCOUNT_JSON:latest,GMAIL_OAUTH_CREDENTIALS=GMAIL_OAUTH_CREDENTIALS:latest,GMAIL_USER_EMAIL=GMAIL_USER_EMAIL:latest,SHEET_ID=SHEET_ID:latest,PUBSUB_TOPIC=PUBSUB_TOPIC:latest,CLOUD_RUN_URL=CLOUD_RUN_URL:latest" \
   --set-env-vars="ENVIRONMENT=prod"
 ```
@@ -210,11 +216,11 @@ Copy the service URL from the output (e.g. `https://finbot-XXXXXX-uc.a.run.app`)
 Update `CLOUD_RUN_URL` with the real URL:
 ```bash
 # Linux/Mac
-echo -n "https://finbot-XXXXXX-uc.a.run.app" | gcloud secrets versions add CLOUD_RUN_URL --data-file=- --project=finbot-prod
+echo -n "https://finbot-XXXXXX-uc.a.run.app" | gcloud secrets versions add CLOUD_RUN_URL --data-file=- --project=<your-gcp-project>
 
 # Windows PowerShell
 "https://finbot-XXXXXX-uc.a.run.app" | Out-File -FilePath url.txt -Encoding ascii -NoNewline
-gcloud secrets versions add CLOUD_RUN_URL --data-file=url.txt --project=finbot-prod
+gcloud secrets versions add CLOUD_RUN_URL --data-file=url.txt --project=<your-gcp-project>
 Remove-Item url.txt
 ```
 
@@ -243,7 +249,7 @@ curl https://api.telegram.org/bot<TOKEN>/getWebhookInfo
 gcloud pubsub subscriptions create gmail-notifications-push \
   --topic=gmail-notifications \
   --push-endpoint=https://finbot-XXXXXX-uc.a.run.app/gmail-webhook \
-  --project=finbot-prod
+  --project=<your-gcp-project>
 ```
 
 ### 12. Activate Gmail Watch
@@ -262,7 +268,7 @@ gcloud scheduler jobs create http renew-gmail-watch \
   --uri="https://finbot-XXXXXX-uc.a.run.app/renew-watch" \
   --http-method=POST \
   --location=us-central1 \
-  --project=finbot-prod
+  --project=<your-gcp-project>
 ```
 
 **You're done.** Make a card payment at BCP — it should appear in your Sheet and Telegram within 30 seconds.
@@ -364,7 +370,6 @@ app/
   main.py              # FastAPI + webhook routes + command handlers
   config.py            # env vars (pydantic-settings)
   models.py            # Expense, ParsedEmail dataclasses
-  dedup.py             # duplicate check wrapper
   parsers/
     bcp.py             # BCP regex parsers → ParsedEmail | None
     telegram_msg.py    # manual message parser → Expense | None

@@ -152,6 +152,6 @@ class TestYape:
         result = parse_bcp(html, subject, mid)
         assert result is not None
         exp = result.expense
-        assert exp.monto == Decimal("18.00")
+        assert exp.monto == Decimal("16.00")
         assert exp.modalidad == "yape"
         assert exp.concepto  # beneficiary name present

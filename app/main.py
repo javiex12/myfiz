@@ -70,19 +70,21 @@ async def gmail_webhook(request: Request) -> dict[str, Any]:
             logger.warning("gmail_webhook_missing_token")
             raise HTTPException(status_code=403, detail="Missing Bearer token")
         token = auth_header.removeprefix("Bearer ")
+        expected_audience = settings.CLOUD_RUN_URL.rstrip("/") + "/gmail-webhook"
         try:
             id_token.verify_oauth2_token(
                 token,
                 google_requests.Request(),
-                audience=settings.CLOUD_RUN_URL,
+                audience=expected_audience,
             )
         except Exception:
-            logger.warning("gmail_webhook_invalid_jwt")
+            logger.warning("gmail_webhook_invalid_jwt", expected_audience=expected_audience)
             raise HTTPException(status_code=403, detail="Invalid JWT")
 
     body = await request.json()
     raw_data = body.get("message", {}).get("data", "")
     if not raw_data:
+        logger.warning("gmail_webhook_no_data", body_keys=list(body.keys()))
         return {"ok": True}
 
     pubsub_data = json.loads(base64.b64decode(raw_data + "==").decode())
@@ -94,9 +96,17 @@ async def gmail_webhook(request: Request) -> dict[str, Any]:
     telegram: TelegramClient = request.app.state.telegram
     owner_chat_id: int = settings.TELEGRAM_ALLOWED_CHAT_IDS[0]
 
-    message_ids = gmail.get_new_message_ids(history_id)
+    last_history_id = sheets.get_last_history_id()
+    logger.info("gmail_webhook_history_ids", notification=history_id, last_stored=last_history_id)
+    message_ids = gmail.get_new_message_ids(history_id, last_history_id)
+    sheets.set_last_history_id(history_id)
+
+    # Read processed_emails once per webhook call instead of per-message
+    # to avoid Sheets API quota (60 read req/min/user).
+    processed_ids = sheets.get_processed_ids()
+
     for message_id in message_ids:
-        if sheets.is_processed(message_id):
+        if message_id in processed_ids:
             logger.info("gmail_webhook_duplicate_skipped", message_id=message_id)
             continue
 
@@ -112,6 +122,7 @@ async def gmail_webhook(request: Request) -> dict[str, Any]:
         if result and result.expense:
             sheets.append_expense(result.expense)
             sheets.mark_processed(message_id)
+            processed_ids.add(message_id)
             _consecutive_parse_errors = 0
             exp = result.expense
             amount_str = f"S/ {exp.monto}" if exp.moneda == "PEN" else f"$ {exp.monto}"
@@ -147,7 +158,9 @@ async def gmail_webhook(request: Request) -> dict[str, Any]:
 @app.post("/renew-watch")
 async def renew_watch(request: Request) -> dict[str, Any]:
     gmail: GmailClient = request.app.state.gmail
+    sheets: SheetsClient = request.app.state.sheets
     result = gmail.renew_watch(settings.PUBSUB_TOPIC)
+    sheets.set_last_history_id(result["historyId"])
     logger.info("gmail_watch_renewed", history_id=result["historyId"], expiration=result["expiration"])
     return {"ok": True, "historyId": result["historyId"], "expiration": result["expiration"]}
 

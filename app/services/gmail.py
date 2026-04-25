@@ -1,11 +1,16 @@
 import base64
+import email
+import email.header
 import json
 
+import structlog
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
 from app.config import settings
+
+log = structlog.get_logger()
 
 _SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 
@@ -18,23 +23,58 @@ class GmailClient:
             creds.refresh(Request())
         self._service = build("gmail", "v1", credentials=creds)
 
-    def get_new_message_ids(self, history_id: str) -> list[str]:
-        """Return IDs of newly added messages since history_id."""
+    def get_new_message_ids(self, history_id: str, last_history_id: str | None = None) -> list[str]:
+        """Return IDs of newly added messages since last_history_id, filtered to BCP sender.
+
+        last_history_id should be the historyId from the previous successful webhook call.
+        Falls back to history_id - 1 when no stored value exists (first run).
+        """
+        # history.list is exclusive (returns records > startHistoryId).
+        # Using the stored previous historyId ensures we never skip messages that
+        # arrive between the messageAdded event and the Pub/Sub notification.
+        start_id = last_history_id if last_history_id else str(int(history_id) - 1)
         result = (
             self._service.users()
             .history()
             .list(
                 userId="me",
-                startHistoryId=history_id,
-                historyTypes=["messageAdded"],
+                startHistoryId=start_id,
             )
             .execute()
         )
+        history = result.get("history", [])
+        log.info(
+            "gmail_history_list_response",
+            start_id=start_id,
+            record_count=len(history),
+            record_types=[
+                {k: len(v) for k, v in r.items() if isinstance(v, list)}
+                for r in history
+            ],
+        )
         ids: list[str] = []
-        for record in result.get("history", []):
+        for record in history:
             for msg in record.get("messagesAdded", []):
                 ids.append(msg["message"]["id"])
-        return ids
+
+        return [mid for mid in ids if self._is_bcp_email(mid)]
+
+    def _is_bcp_email(self, message_id: str) -> bool:
+        """Lightweight metadata fetch to check if email is from BCP."""
+        meta = (
+            self._service.users()
+            .messages()
+            .get(
+                userId="me",
+                id=message_id,
+                format="metadata",
+                metadataHeaders=["From"],
+            )
+            .execute()
+        )
+        headers = {h["name"]: h["value"] for h in meta.get("payload", {}).get("headers", [])}
+        sender = headers.get("From", "")
+        return "notificaciones@notificacionesbcp.com.pe" in sender or "notificaciones@yape.pe" in sender
 
     def renew_watch(self, pubsub_topic: str) -> dict:
         return (
@@ -51,36 +91,38 @@ class GmailClient:
         )
 
     def get_message(self, message_id: str) -> tuple[str, str, str]:
-        """Fetch a message and return (html, subject, message_id_header)."""
+        """Fetch a message and return (html, subject, message_id_header).
+
+        Fetches as raw RFC 822 and parses with email module so QP/base64/charset
+        are handled correctly across all email formats (including the new Yape
+        format with iso-8859-1 + quoted-printable).
+        """
         msg = (
             self._service.users()
             .messages()
-            .get(userId="me", id=message_id, format="full")
+            .get(userId="me", id=message_id, format="raw")
             .execute()
         )
-        payload = msg["payload"]
-        headers = {h["name"]: h["value"] for h in payload.get("headers", [])}
-        subject = headers.get("Subject", "")
-        message_id_header = headers.get("Message-ID", "").strip().strip("<>")
+        raw_bytes = base64.urlsafe_b64decode(msg["raw"] + "==")
+        parsed = email.message_from_bytes(raw_bytes)
 
-        html = _extract_html(payload)
+        subject = str(email.header.make_header(email.header.decode_header(parsed["Subject"] or "")))
+        message_id_header = (parsed["Message-ID"] or "").strip().strip("<>")
+
+        html = ""
+        if parsed.is_multipart():
+            for part in parsed.walk():
+                if part.get_content_type() == "text/html":
+                    payload = part.get_payload(decode=True)
+                    charset = part.get_content_charset() or "utf-8"
+                    html = payload.decode(charset, errors="replace")
+                    break
+        else:
+            payload = parsed.get_payload(decode=True)
+            charset = parsed.get_content_charset() or "utf-8"
+            html = payload.decode(charset, errors="replace")
+
+        log.info("gmail_message_extracted", subject=subject, html_len=len(html))
         return html, subject, message_id_header
 
 
-def _extract_html(payload: dict) -> str:
-    """Recursively walk MIME parts to find the text/html body."""
-    mime_type = payload.get("mimeType", "")
-    if mime_type == "text/html":
-        data = payload.get("body", {}).get("data", "")
-        if data:
-            raw = base64.urlsafe_b64decode(data + "==")
-            charset = "utf-8"
-            for h in payload.get("headers", []):
-                if h["name"].lower() == "content-type" and "charset=" in h["value"]:
-                    charset = h["value"].split("charset=")[-1].strip().strip('"')
-            return raw.decode(charset, errors="replace")
-    for part in payload.get("parts", []):
-        result = _extract_html(part)
-        if result:
-            return result
-    return ""

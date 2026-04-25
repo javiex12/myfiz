@@ -61,7 +61,7 @@ def _parse_credit(html: str, subject: str, message_id: str) -> ParsedEmail | Non
         concepto=_clean_merchant(merchant),
         monto=amount,
         modalidad="credito",
-        raw=html,
+
     )
 
 
@@ -94,7 +94,7 @@ def _parse_debit(html: str, subject: str, message_id: str) -> ParsedEmail | None
         concepto=concepto,
         monto=amount,
         modalidad=modalidad,
-        raw=html,
+
     )
 
 
@@ -123,7 +123,7 @@ def _parse_transfer_terceros(html: str, subject: str, message_id: str) -> Parsed
         concepto=dest_m.group(1).strip(),
         monto=_amount(amount_m.group(1)),
         modalidad="transferencia",
-        raw=html,
+
     )
 
 
@@ -153,7 +153,7 @@ def _parse_pago_tc(html: str, subject: str, message_id: str) -> ParsedEmail | No
         concepto=f"Pago TC {last4}",
         monto=_amount(amount_m.group(1)),
         modalidad="transferencia",
-        raw=html,
+
     )
 
 
@@ -187,7 +187,7 @@ def _parse_yape(html: str, subject: str, message_id: str) -> ParsedEmail | None:
         concepto=beneficiary_m.group(1).strip(),
         monto=_amount(amount_m.group(1)),
         modalidad="yape",
-        raw=html,
+
     )
 
 
@@ -201,7 +201,6 @@ def _make_parsed(
     concepto: str,
     monto: Decimal | None,
     modalidad: str,
-    raw: str,
 ) -> ParsedEmail | None:
     if monto is None:
         return None
@@ -216,7 +215,6 @@ def _make_parsed(
             modalidad=modalidad,
             fuente="auto",
             message_id=message_id,
-            raw_excerpt=raw[:400],
         ),
     )
 

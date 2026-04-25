@@ -3,7 +3,7 @@ from datetime import datetime
 from decimal import Decimal
 
 VALID_MODALITIES: frozenset[str] = frozenset(
-    {"efectivo", "debito", "credito", "yape", "plin", "transferencia"}
+    {"efectivo", "debito", "credito", "yape", "plin", "transferencia", "wallet"}
 )
 
 
@@ -16,7 +16,6 @@ class Expense:
     modalidad: str
     fuente: str
     message_id: str
-    raw_excerpt: str
 
 
 @dataclass

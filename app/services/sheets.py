@@ -22,6 +22,11 @@ class SheetsClient:
         self._expenses = spreadsheet.worksheet("expenses")
         self._processed = spreadsheet.worksheet("processed_emails")
         self._errors = spreadsheet.worksheet("errors")
+        try:
+            self._config = spreadsheet.worksheet("config")
+        except gspread.exceptions.WorksheetNotFound:
+            self._config = spreadsheet.add_worksheet("config", rows=10, cols=2)
+            self._config.append_row(["key", "value"])
 
     def append_expense(self, expense: Expense) -> None:
         row = [
@@ -32,17 +37,32 @@ class SheetsClient:
             expense.modalidad,
             expense.fuente,
             expense.message_id,
-            expense.raw_excerpt,
         ]
         self._expenses.append_row(row, value_input_option="USER_ENTERED")
 
-    def is_processed(self, message_id: str) -> bool:
-        col = self._processed.col_values(1)  # message_id is column 1
-        return message_id in col
+    def get_processed_ids(self) -> set[str]:
+        """Read the entire processed_emails message_id column in a single API call."""
+        col = self._processed.col_values(1)
+        return set(col[1:]) if len(col) > 1 else set()
 
     def mark_processed(self, message_id: str) -> None:
         now = datetime.now(tz=LIMA_TZ).isoformat()
         self._processed.append_row([message_id, now])
+
+    def get_last_history_id(self) -> str | None:
+        rows = self._config.get_all_values()
+        for row in rows[1:]:
+            if row and row[0] == "last_history_id":
+                return row[1] if len(row) > 1 and row[1] else None
+        return None
+
+    def set_last_history_id(self, history_id: str) -> None:
+        rows = self._config.get_all_values()
+        for i, row in enumerate(rows, start=1):
+            if row and row[0] == "last_history_id":
+                self._config.update_cell(i, 2, history_id)
+                return
+        self._config.append_row(["last_history_id", history_id])
 
     def log_error(self, type: str, detail: str, raw: str) -> None:
         now = datetime.now(tz=LIMA_TZ).isoformat()
@@ -81,5 +101,4 @@ def _row_to_expense(row: list[str]) -> Expense:
         modalidad=row[4],
         fuente=row[5],
         message_id=row[6],
-        raw_excerpt=row[7] if len(row) > 7 else "",
     )

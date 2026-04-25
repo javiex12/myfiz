@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     GMAIL_USER_EMAIL: str
     SHEET_ID: str
     PUBSUB_TOPIC: str
-    GCP_PROJECT_ID: str = "finbot-prod"
+    GCP_PROJECT_ID: str = ""
     CLOUD_RUN_URL: str = ""
     ENVIRONMENT: str = "dev"
 

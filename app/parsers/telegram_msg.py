@@ -49,5 +49,4 @@ def parse_manual(text: str) -> Expense | None:
         modalidad=modalidad,
         fuente="manual",
         message_id="",
-        raw_excerpt="",
     )
