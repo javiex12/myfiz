@@ -29,6 +29,13 @@ class SheetsClient:
             self._config.append_row(["key", "value"])
 
     def append_expense(self, expense: Expense) -> None:
+        # spent_id is auto-assigned: read column H (1 API call) and take max + 1.
+        # Race window between read and append is acceptable for V1 single-user volume.
+        col_h = self._expenses.col_values(8)
+        existing_ids = [int(v) for v in col_h[1:] if v.strip().isdigit()]
+        next_id = max(existing_ids) + 1 if existing_ids else 1
+        expense.spent_id = next_id
+
         row = [
             expense.timestamp.isoformat(),
             expense.concepto,
@@ -37,8 +44,20 @@ class SheetsClient:
             expense.modalidad,
             expense.fuente,
             expense.message_id,
+            str(next_id),
         ]
         self._expenses.append_row(row, value_input_option="USER_ENTERED")
+
+    def delete_by_spent_id(self, spent_id: int) -> Expense:
+        """Delete the row whose column H equals spent_id. Returns the deleted Expense."""
+        rows = self._expenses.get_all_values()
+        target_str = str(spent_id)
+        for i, row in enumerate(rows[1:], start=2):  # i is 1-indexed sheet row
+            if len(row) >= 8 and row[7].strip() == target_str:
+                expense = _row_to_expense(row)
+                self._expenses.delete_rows(i)
+                return expense
+        raise ValueError(f"No existe gasto #{spent_id}")
 
     def get_processed_ids(self) -> set[str]:
         """Read the entire processed_emails message_id column in a single API call."""
@@ -93,6 +112,9 @@ class SheetsClient:
 
 
 def _row_to_expense(row: list[str]) -> Expense:
+    spent_id: int | None = None
+    if len(row) >= 8 and row[7].strip().isdigit():
+        spent_id = int(row[7])
     return Expense(
         timestamp=datetime.fromisoformat(row[0]),
         concepto=row[1],
@@ -101,4 +123,5 @@ def _row_to_expense(row: list[str]) -> Expense:
         modalidad=row[4],
         fuente=row[5],
         message_id=row[6],
+        spent_id=spent_id,
     )

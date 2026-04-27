@@ -54,14 +54,15 @@ def _parse_credit(html: str, subject: str, message_id: str) -> ParsedEmail | Non
         log.warning("bcp_credit_fields_missing", message_id=message_id)
         return None
 
+    monto, moneda = amount
     return _make_parsed(
         message_id=message_id,
         subject=subject,
         ts=ts,
         concepto=_clean_merchant(merchant),
-        monto=amount,
+        monto=monto,
+        moneda=moneda,
         modalidad="credito",
-
     )
 
 
@@ -77,6 +78,7 @@ def _parse_debit(html: str, subject: str, message_id: str) -> ParsedEmail | None
         log.warning("bcp_debit_fields_missing", message_id=message_id)
         return None
 
+    monto, moneda = amount
     raw_merchant = _clean_merchant(merchant)
 
     # Plin payments appear as debit with a "PLIN-" prefix in the merchant name
@@ -92,9 +94,9 @@ def _parse_debit(html: str, subject: str, message_id: str) -> ParsedEmail | None
         subject=subject,
         ts=ts,
         concepto=concepto,
-        monto=amount,
+        monto=monto,
+        moneda=moneda,
         modalidad=modalidad,
-
     )
 
 
@@ -201,6 +203,7 @@ def _make_parsed(
     concepto: str,
     monto: Decimal | None,
     modalidad: str,
+    moneda: str = "PEN",
 ) -> ParsedEmail | None:
     if monto is None:
         return None
@@ -211,7 +214,7 @@ def _make_parsed(
             timestamp=ts,
             concepto=concepto,
             monto=monto,
-            moneda="PEN",
+            moneda=moneda,
             modalidad=modalidad,
             fuente="auto",
             message_id=message_id,
@@ -219,12 +222,20 @@ def _make_parsed(
     )
 
 
-def _consumo_amount(html: str) -> Decimal | None:
+def _consumo_amount(html: str) -> tuple[Decimal, str] | None:
+    """Extract amount and currency. BCP uses 'S/' for PEN and '$' for USD."""
     m = re.search(
-        r"Realizaste un consumo de\s*<b>S/\s*([\d,.]+)</b>",
+        r"Realizaste un consumo de\s*<b>(S/|\$)\s*([\d,.]+)</b>",
         html, re.IGNORECASE,
     )
-    return _amount(m.group(1)) if m else None
+    if not m:
+        return None
+    symbol, amount_str = m.groups()
+    amount = _amount(amount_str)
+    if amount is None:
+        return None
+    moneda = "USD" if symbol == "$" else "PEN"
+    return amount, moneda
 
 
 def _consumo_merchant(html: str, card_suffix: str) -> str | None:

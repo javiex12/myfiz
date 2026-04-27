@@ -16,6 +16,7 @@ class Expense:
     modalidad: str
     fuente: str
     message_id: str
+    spent_id: int | None = None
 
 
 @dataclass

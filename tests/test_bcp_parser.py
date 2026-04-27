@@ -111,6 +111,17 @@ class TestDebit:
         assert exp.monto == Decimal("400.00")
         assert exp.modalidad == "plin"
 
+    def test_debit_usd(self):
+        html, subject, mid = _load(FIXTURES / "debit" / "dolar_example.eml")
+        result = parse_bcp(html, subject, mid)
+        assert result is not None
+        exp = result.expense
+        assert exp is not None
+        assert exp.monto == Decimal("5.00")
+        assert exp.moneda == "USD"
+        assert exp.modalidad == "debito"
+        assert "ELEVENLABS" in exp.concepto.upper()
+
 
 # ── Transfers ──────────────────────────────────────────────────────────────────
 

@@ -127,7 +127,8 @@ async def gmail_webhook(request: Request) -> dict[str, Any]:
             exp = result.expense
             amount_str = f"S/ {exp.monto}" if exp.moneda == "PEN" else f"$ {exp.monto}"
             telegram.send_message(
-                owner_chat_id, f"✅ {exp.concepto} {amount_str} ({exp.modalidad})"
+                owner_chat_id,
+                f"✅ #{exp.spent_id} {exp.concepto} {amount_str} ({exp.modalidad})",
             )
             logger.info(
                 "gmail_webhook_expense_saved",
@@ -209,7 +210,7 @@ def _handle_command(text: str, sheets: SheetsClient) -> str:
         if not expenses:
             return "No hay gastos hoy."
         total = sum(e.monto for e in expenses)
-        lines = [f"• {e.concepto}: S/ {e.monto}" for e in expenses]
+        lines = [f"#{_fmt_id(e.spent_id)} {e.concepto}: S/ {e.monto}" for e in expenses]
         lines.append(f"\nTotal: S/ {total}")
         return "\n".join(lines)
 
@@ -218,8 +219,21 @@ def _handle_command(text: str, sheets: SheetsClient) -> str:
         if not expenses:
             return "No hay gastos registrados."
         return "\n".join(
-            f"• {e.concepto}: S/ {e.monto} ({e.modalidad})" for e in expenses
+            f"#{_fmt_id(e.spent_id)} {e.concepto}: S/ {e.monto} ({e.modalidad})"
+            for e in expenses
         )
+
+    if cmd == "/delete":
+        try:
+            sid = int(arg)
+        except ValueError:
+            return "Uso: /delete <id>  (el id se ve en /ultimo y /hoy)"
+        try:
+            deleted = sheets.delete_by_spent_id(sid)
+        except ValueError as e:
+            return f"❌ {e}"
+        amt = f"S/ {deleted.monto}" if deleted.moneda == "PEN" else f"$ {deleted.monto}"
+        return f"🗑️ Eliminado #{sid}: {deleted.concepto} {amt} ({deleted.modalidad})"
 
     if cmd == "/resumen":
         today = datetime.now(tz=_LIMA_TZ)
@@ -256,7 +270,7 @@ def _handle_command(text: str, sheets: SheetsClient) -> str:
         lines.append(f"\nTotal: S/ {total}")
         return "\n".join(lines)
 
-    return "Comandos: /hoy, /ultimo, /resumen, /categoria <nombre>"
+    return "Comandos: /hoy, /ultimo, /resumen, /categoria <nombre>, /delete <id>"
 
 
 def _handle_manual_expense(text: str, sheets: SheetsClient) -> str:
@@ -273,4 +287,11 @@ def _handle_manual_expense(text: str, sheets: SheetsClient) -> str:
         amount_str = f"S/ {expense.monto}"
     else:
         amount_str = f"$ {expense.monto}"
-    return f"✅ Guardado: {expense.concepto} {amount_str} ({expense.modalidad})"
+    return (
+        f"✅ Guardado #{expense.spent_id}: {expense.concepto} "
+        f"{amount_str} ({expense.modalidad})"
+    )
+
+
+def _fmt_id(spent_id: int | None) -> str:
+    return str(spent_id) if spent_id is not None else "?"
