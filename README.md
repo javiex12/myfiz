@@ -16,7 +16,7 @@ BCP sends email → Gmail → Pub/Sub → Cloud Run → Google Sheets + Telegram
 
 - **Auto-logging**: detects BCP emails (debit, credit card, Yape, transfers) and logs them to Google Sheets in under 30 seconds.
 - **Manual logging**: send `Almuerzo 25 PEN yape` to the bot and it saves it.
-- **Commands**: `/hoy` (today), `/ultimo` (last 5), `/resumen` (monthly summary), `/categoria_<name>` (search by concept).
+- **Commands**: `/hoy` (today), `/ultimo` (last 5), `/resumen` (monthly summary), `/categoria_<name>` (search by concept), `/delete <id>` (delete by spent_id).
 - **Deduplication**: if Gmail re-delivers a notification, the same expense is never saved twice.
 - **Parse failure alerts**: if an email can't be parsed, the bot messages you immediately so you can log it manually.
 
@@ -345,6 +345,7 @@ Supermercado 120.50 PEN debito
 | `/ultimo` | Last 5 expenses |
 | `/resumen` | Current month totals by modality |
 | `/categoria_<name>` | Search by concept (e.g. `/categoria_Taxi`) |
+| `/delete <id>` | Delete an expense by its `spent_id` (shown by `/ultimo` and `/hoy` as `#<id>`) |
 
 ---
 
