@@ -7,6 +7,7 @@ import structlog
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 
 from app.config import settings
 
@@ -61,17 +62,23 @@ class GmailClient:
 
     def _is_bcp_email(self, message_id: str) -> bool:
         """Lightweight metadata fetch to check if email is from BCP."""
-        meta = (
-            self._service.users()
-            .messages()
-            .get(
-                userId="me",
-                id=message_id,
-                format="metadata",
-                metadataHeaders=["From"],
+        try:
+            meta = (
+                self._service.users()
+                .messages()
+                .get(
+                    userId="me",
+                    id=message_id,
+                    format="metadata",
+                    metadataHeaders=["From"],
+                )
+                .execute()
             )
-            .execute()
-        )
+        except HttpError as e:
+            if e.resp.status == 404:
+                log.warning("gmail_message_not_found", message_id=message_id)
+                return False
+            raise
         headers = {h["name"]: h["value"] for h in meta.get("payload", {}).get("headers", [])}
         sender = headers.get("From", "")
         return "notificaciones@notificacionesbcp.com.pe" in sender or "notificaciones@yape.pe" in sender
