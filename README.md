@@ -174,8 +174,14 @@ gcloud secrets create GMAIL_OAUTH_CREDENTIALS --data-file=token.json --project=<
 gcloud secrets create GMAIL_USER_EMAIL --data-file=- --project=<your-gcp-project> <<< "<your-gmail>"
 gcloud secrets create SHEET_ID --data-file=- --project=<your-gcp-project> <<< "<your-sheet-id>"
 
-# Pub/Sub
-gcloud secrets create PUBSUB_TOPIC --data-file=- --project=<your-gcp-project> <<< "gmail-notifications"
+# Pub/Sub — must be the full topic path, not just the topic name
+# Linux/Mac
+echo -n "projects/<your-gcp-project>/topics/gmail-notifications" | gcloud secrets create PUBSUB_TOPIC --data-file=- --project=<your-gcp-project>
+
+# Windows PowerShell
+"projects/<your-gcp-project>/topics/gmail-notifications" | Out-File -FilePath pubsub_topic.txt -Encoding ascii -NoNewline
+gcloud secrets create PUBSUB_TOPIC --data-file=pubsub_topic.txt --project=<your-gcp-project>
+Remove-Item pubsub_topic.txt
 
 # Placeholder — will update after first deploy
 gcloud secrets create CLOUD_RUN_URL --data-file=- --project=<your-gcp-project> <<< "https://placeholder.run.app"

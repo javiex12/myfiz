@@ -89,7 +89,7 @@ class GmailClient:
             .watch(
                 userId="me",
                 body={
-                    "topicName": f"projects/{settings.GCP_PROJECT_ID}/topics/{pubsub_topic}",
+                    "topicName": pubsub_topic,
                     "labelIds": ["INBOX"],
                     "labelFilterBehavior": "INCLUDE",
                 },

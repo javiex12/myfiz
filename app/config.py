@@ -15,8 +15,12 @@ class Settings(BaseSettings):
     GMAIL_USER_EMAIL: str
     SHEET_ID: str
     PUBSUB_TOPIC: str
-    GCP_PROJECT_ID: str = ""
     CLOUD_RUN_URL: str = ""
+
+    @field_validator("PUBSUB_TOPIC", "TELEGRAM_BOT_TOKEN", "CLOUD_RUN_URL", mode="before")
+    @classmethod
+    def strip_whitespace(cls, v: Any) -> str:
+        return v.strip() if isinstance(v, str) else v
     ENVIRONMENT: str = "dev"
 
     @field_validator("TELEGRAM_ALLOWED_CHAT_IDS", mode="before")
